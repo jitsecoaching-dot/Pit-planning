@@ -410,6 +410,7 @@ async function saveStudio(){
 function fname(){const it=studioItems()[STUDIO.idx];return "PIT-"+isoDate(dateFor(current))+"-"+it.time.replace(":","")+"-"+it.title.replace(/^Optioneel: /,"").replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").toLowerCase()+".jpg"}
 async function exportStudio(){
   if(!STUDIO.blob)await saveStudio();const file=new File([STUDIO.blob],fname(),{type:"image/jpeg"});
+  if(window.claude&&window.claude.use){try{const dl=await window.claude.use("downloads");if(dl){await dl.save({filename:file.name,data:STUDIO.blob});flash("Opgeslagen: "+file.name);return}}catch(e){if(e&&e.code==="declined")return;flash("Opslaan lukt hier niet. Rechtsklik op het voorbeeld en kies Afbeelding opslaan.");return}}
   if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file]});return}catch(e){if(e.name==="AbortError")return}}
   const a=document.createElement("a");a.href=URL.createObjectURL(file);a.download=file.name;document.body.appendChild(a);a.click();a.remove();flash("Gedownload: "+file.name);
 }
