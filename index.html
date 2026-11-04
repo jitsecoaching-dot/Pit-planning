@@ -164,7 +164,7 @@ footer{text-align:center;font-family:var(--f-mono);font-size:10px;letter-spacing
             <label class="st-label" for="st-boxtext">Tekst onderaan<textarea id="st-boxtext"></textarea></label>
             <label class="st-label" for="st-fine">Kleine regel onderaan<input type="text" id="st-fine" placeholder="Personal experience, not medical advice."></label>
             <label class="st-label" for="st-skin">Huid gladmaken<input type="range" id="st-skin" min="0" max="100" value="70"></label>
-            <label class="st-label" for="st-zoom">Inzoomen<input type="range" id="st-zoom" min="100" max="250" value="100"></label>
+            <label class="st-label" for="st-zoom">In- en uitzoomen<input type="range" id="st-zoom" min="50" max="250" value="75"></label>
             <div class="st-two">
               <label class="st-label" for="st-ox">Links / rechts<input type="range" id="st-ox" min="-100" max="100" value="0"></label>
               <label class="st-label" for="st-oy">Omhoog / omlaag<input type="range" id="st-oy" min="-100" max="100" value="0"></label>
@@ -324,12 +324,12 @@ const PROTO={kicker:"MY PROTOCOL",title:"MOTS-c",pillTop:"MONDAY · THURSDAY",pi
   fine:"Personal experience, not medical advice."};
 function shortTitle(t){if(t.length<=22)return t;const w=t.split(" ");let o="";for(const x of w){if((o+" "+x).trim().length>22)break;o=(o+" "+x).trim()}return o||t.slice(0,22)}
 function defaultsFor(it){
-  if(/MOTS-c protocol/i.test(it.title))return {...PROTO,format:"story",skin:20};
+  if(/MOTS-c protocol/i.test(it.title))return {...PROTO,format:"story",skin:0,zoom:1};
   const first=(it.caption||it.what).split("\n").filter(l=>l&&!l.startsWith("#"))[0]||"";
   const title=it.title.replace(/^Optioneel: /,"").replace(/^(Carrousel|Reel|Educatie-Reel)[: ]*/i,"").replace(/["“”]/g,"");
   const peptide=/peptide|MOTS-c/i.test(it.title+it.what);
   return {format:it.type==="feed"?"feed":"story",kicker:"PAIN IS TEMPORARY",title:shortTitle(title),pillTop:"",pillVal:"",
-    phase:"CURRENTLY IN A FAT LOSS PHASE",boxTitle:"",boxText:first,fine:peptide?"Personal experience, not medical advice.":"",skin:/check-in|voortgang|physique/i.test(it.title+it.what)?85:60};
+    phase:"CURRENTLY IN A FAT LOSS PHASE",boxTitle:"",boxText:first,fine:peptide?"Personal experience, not medical advice.":"",skin:/check-in|voortgang|physique/i.test(it.title+it.what) ?70:55};
 }
 /* IndexedDB */
 function idb(){return new Promise((res,rej)=>{const r=indexedDB.open("pit-studio",1);r.onupgradeneeded=()=>r.result.createObjectStore("photos");r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
@@ -349,16 +349,20 @@ function boxBlur(src,W,H,r){const tmp=new Float32Array(W*H),out=new Float32Array
   for(let x=0;x<W;x++){let acc=0;for(let y=-r;y<=r;y++)acc+=tmp[Math.min(H-1,Math.max(0,y))*W+x];
     for(let y=0;y<H;y++){out[y*W+x]=acc/d;acc+=tmp[Math.min(H-1,y+r+1)*W+x]-tmp[Math.max(0,y-r)*W+x]}}return out}
 /* Huid gladmaken: rood-filter luminantie (rode plekjes worden even licht als de huid) + randbewarende verzachting */
+function sstep(a,b,x){const t=Math.min(1,Math.max(0,(x-a)/(b-a)));return t*t*(3-2*t)}
+/* Huid natuurlijk: licht rood-filter + alleen donkere plekjes optillen naar de omliggende huid; textuur en randen blijven */
 function toneMap(p,W,H,skin){const N=W*H,L=new Float32Array(N);
-  const wr=.299+(.70-.299)*skin,wg=.587+(.25-.587)*skin,wb=.114+(.05-.114)*skin;
+  const k=skin*.55,wr=.299+(.55-.299)*k,wg=.587+(.38-.587)*k,wb=.114+(.07-.114)*k;
   for(let i=0,j=0;j<N;i+=4,j++)L[j]=p[i]*wr+p[i+1]*wg+p[i+2]*wb;
-  let out=L;if(skin>0){const r=Math.max(2,Math.round(W/150));const B=boxBlur(boxBlur(L,W,H,r),W,H,r);const sig=14+22*skin,amt=Math.min(1,skin*1.1);out=new Float32Array(N);
-    for(let j=0;j<N;j++){const dd=(B[j]-L[j])/sig;out[j]=L[j]+(B[j]-L[j])*amt*Math.exp(-dd*dd)}}
+  let out=L;if(skin>0){const r=Math.max(2,Math.round(W/110));const B=boxBlur(boxBlur(L,W,H,r),W,H,r);out=new Float32Array(N);
+    for(let j=0;j<N;j++){const d=B[j]-L[j];const m=sstep(3,12,d)*(1-sstep(34,60,d))*(1-sstep(70,40,B[j]));out[j]=L[j]+d*m*skin*.85}}
   for(let i=0,j=0;j<N;i+=4,j++){const v=Math.max(0,Math.min(255,out[j]))|0;p[i]=LUT[v*3];p[i+1]=LUT[v*3+1];p[i+2]=LUT[v*3+2]}}
 function drawPhoto(ctx,img,W,H,zoom,ox,oy,fast,skin){
   const iw=img.videoWidth||img.naturalWidth,ih=img.videoHeight||img.naturalHeight;if(!iw||!ih)return;
-  const s=Math.max(W/iw,H/ih)*zoom;const w=iw*s,h=ih*s;
-  const x=(W-w)/2+ox/100*(w-W)/2,y=(H-h)/2+oy/100*(h-H)/2;ctx.drawImage(img,x,y,w,h);
+  const s0=Math.max(W/iw,H/ih);
+  if(zoom<1){const w0=iw*s0,h0=ih*s0;ctx.drawImage(img,(W-w0)/2,(H-h0)/2,w0,h0);ctx.fillStyle="rgba(4,12,40,.6)";ctx.fillRect(0,0,W,H)}
+  const s=s0*zoom;const w=iw*s,h=ih*s;
+  const x=(W-w)/2+ox/100*Math.abs(w-W)/2,y=(H-h)/2+oy/100*Math.abs(h-H)/2;ctx.drawImage(img,x,y,w,h);
   if(fast){ctx.save();ctx.globalCompositeOperation="color";ctx.fillStyle="#2f6fe6";ctx.fillRect(0,0,W,H);
     ctx.globalCompositeOperation="screen";ctx.fillStyle="#08184a";ctx.fillRect(0,0,W,H);ctx.restore();return}
   const d=ctx.getImageData(0,0,W,H),p=d.data;toneMap(p,W,H,skin||0);
@@ -394,7 +398,7 @@ function fieldVals(){const v=id=>document.getElementById(id).value;return {forma
   phase:v("st-phase"),boxTitle:v("st-boxtitle"),boxText:v("st-boxtext"),fine:v("st-fine"),zoom:+v("st-zoom")/100,skin:+v("st-skin"),ox:+v("st-ox"),oy:+v("st-oy")}}
 function fillFields(o){const set=(id,x)=>document.getElementById(id).value=x??"";set("st-format",o.format);set("st-kicker",o.kicker);set("st-title",o.title);set("st-pilltop",o.pillTop);
   set("st-pillval",o.pillVal);set("st-phase",o.phase);set("st-boxtitle",o.boxTitle);set("st-boxtext",o.boxText);set("st-fine",o.fine);
-  set("st-zoom",Math.round((o.zoom||1)*100));set("st-skin",o.skin??70);set("st-ox",o.ox||0);set("st-oy",o.oy||0)}
+  set("st-zoom",Math.round((o.zoom||.75)*100));set("st-skin",o.skin??70);set("st-ox",o.ox||0);set("st-oy",o.oy||0)}
 let rT=null;function rerender(){STUDIO.blob=null;STUDIO.vblob=null;if(STUDIO.kind==="video")return;clearTimeout(rT);rT=setTimeout(()=>{render(document.getElementById("st-canvas"),STUDIO.img,fieldVals())},60)}
 function stopVideo(){cancelAnimationFrame(STUDIO.raf);if(STUDIO.kind==="video"&&STUDIO.img){try{STUDIO.img.pause()}catch(e){}}}
 function loadVideo(blob){return new Promise((res,rej)=>{const v=document.createElement("video");v.muted=true;v.playsInline=true;v.setAttribute("playsinline","");v.loop=true;v.preload="auto";
@@ -423,7 +427,7 @@ function loadImg(blob){return new Promise((res,rej)=>{const u=URL.createObjectUR
 async function openStudio(idx,pick){
   STUDIO.idx=idx;const it=studioItems()[idx];document.getElementById("st-post").value=idx;
   const saved=await dbGet(photoKey(current,it));
-  if(saved){await setMedia(saved.original,saved.kind==="video");STUDIO.vblob=saved.editedVideo||null;fillFields(saved.opts)}else{stopVideo();STUDIO.file=null;STUDIO.img=null;STUDIO.kind="image";fillFields({...defaultsFor(it),zoom:1,ox:0,oy:0})}
+  if(saved){await setMedia(saved.original,saved.kind==="video");STUDIO.vblob=saved.editedVideo||null;fillFields(saved.opts)}else{stopVideo();STUDIO.file=null;STUDIO.img=null;STUDIO.kind="image";fillFields({...defaultsFor(it),zoom:.75,ox:0,oy:0})}
   document.getElementById("st-empty").hidden=!!STUDIO.img;document.getElementById("st-edit").hidden=!STUDIO.img;
   if(STUDIO.img)rerender();
   document.getElementById("studio").scrollIntoView({behavior:"smooth",block:"start"});
@@ -466,7 +470,7 @@ function initStudio(){
     try{await setMedia(f,isV)}catch(err){flash(isV?"Deze video kan niet worden geopend. Kies een MP4 of MOV.":"Deze foto kan niet worden geopend. Kies een JPG of PNG.");return}
     document.getElementById("st-empty").hidden=true;document.getElementById("st-edit").hidden=false;rerender();await saveStudio()};
   document.querySelectorAll("#st-edit input,#st-edit select,#st-edit textarea").forEach(x=>x.addEventListener("input",rerender));
-  document.getElementById("st-reset").onclick=()=>{fillFields({...defaultsFor(studioItems()[STUDIO.idx]),zoom:1,ox:0,oy:0});rerender()};
+  document.getElementById("st-reset").onclick=()=>{fillFields({...defaultsFor(studioItems()[STUDIO.idx]),zoom:.75,ox:0,oy:0});rerender()};
   document.getElementById("st-save").onclick=saveStudio;document.getElementById("st-export").onclick=exportStudio;
   document.getElementById("st-del").onclick=async()=>{const it=studioItems()[STUDIO.idx];await dbDel(photoKey(current,it));stopVideo();STUDIO.img=null;STUDIO.file=null;STUDIO.kind="image";
     document.getElementById("st-empty").hidden=false;document.getElementById("st-edit").hidden=true;flash("Foto verwijderd");renderDay()};
