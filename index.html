@@ -97,7 +97,8 @@ footer{text-align:center;font-family:var(--f-mono);font-size:10px;letter-spacing
 
 .photo-btn{align-self:flex-start;font-family:var(--f-mono);font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--ash);background:none;border:1.5px dashed var(--ash);padding:6px 10px;cursor:pointer}
 .photo-btn:focus-visible,.st-btn:focus-visible{outline:2px solid var(--ember);outline-offset:3px}
-.thumb{width:84px;border:1.5px solid var(--bone);line-height:0}
+.thumb{width:84px;border:1.5px solid var(--bone);line-height:0;position:relative}
+.vbadge{position:absolute;left:6px;bottom:6px;background:var(--bone);color:var(--ink);font-size:11px;line-height:1;padding:4px 6px}
 .thumb img{width:100%;display:block}
 .actions{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
 #studio{border:2px solid var(--bone);display:flex;flex-direction:column}
@@ -141,10 +142,10 @@ footer{text-align:center;font-family:var(--f-mono);font-size:10px;letter-spacing
     <div class="st-body">
       <label class="st-label" for="st-post">Voor welke post
         <select id="st-post"></select></label>
-      <input type="file" id="st-file" accept="image/*" hidden>
+      <input type="file" id="st-file" accept="image/*,video/*" hidden>
       <div class="st-empty" id="st-empty">
-        <p style="margin:0">Kies een foto. Hij wordt bijgesneden en in blauw/wit bewerkt, met de tekst van deze post erop.</p>
-        <button type="button" class="st-btn primary" id="st-pick">Foto kiezen</button>
+        <p style="margin:0">Kies een foto of video. Die wordt bijgesneden en in blauw/wit bewerkt, met de tekst van deze post erop.</p>
+        <button type="button" class="st-btn primary" id="st-pick">Foto of video kiezen</button>
       </div>
       <div id="st-edit" hidden>
         <div class="st-grid">
@@ -174,7 +175,7 @@ footer{text-align:center;font-family:var(--f-mono);font-size:10px;letter-spacing
           <button type="button" class="st-btn" id="st-save">Bewaar bij post</button>
           <button type="button" class="st-btn quiet" id="st-reset">Tekst herstellen</button>
           <button type="button" class="st-btn quiet" id="st-del">Verwijderen</button>
-          <button type="button" class="st-btn quiet" id="st-pick2" onclick="document.getElementById('st-file').click()">Andere foto</button>
+          <button type="button" class="st-btn quiet" id="st-pick2" onclick="document.getElementById('st-file').click()">Andere foto of video</button>
         </div>
       </div>
       <p class="st-msg" id="st-msg" hidden></p>
@@ -302,11 +303,11 @@ function renderDay(){
           </div>
           ${it.note?`<div class="note">${esc(it.note)}</div>`:""}
           <div class="thumb" id="th-${current}-${i}" hidden></div>
-          <button type="button" class="photo-btn" id="pb-${current}-${i}" data-i="${i}">+ Foto</button>
+          <button type="button" class="photo-btn" id="pb-${current}-${i}" data-i="${i}">+ Foto / video</button>
           ${it.caption?`<button type="button" class="toggle" id="tg-${current}-${i}" aria-expanded="false">Caption tonen</button>
           <div class="detail" hidden><div class="caption">${fmtCaption(it.caption)}</div><button type="button" class="copy" id="cp-${current}-${i}">Kopieer caption</button></div>`:""}
         </div></div>`}).join("")}</div></div>`;
-  el.querySelectorAll(".photo-btn").forEach(b=>b.onclick=async()=>{const has=b.textContent!=="+ Foto";await openStudio(+b.dataset.i,!has)});
+  el.querySelectorAll(".photo-btn").forEach(b=>b.onclick=async()=>{const has=!b.textContent.startsWith("+");await openStudio(+b.dataset.i,!has)});
   renderStudio();
   el.querySelectorAll(".check").forEach(b=>b.onclick=()=>{const d=load(key);const id=b.dataset.id;if(d[id])delete d[id];else d[id]=1;save(key,d);renderDay()});
   el.querySelectorAll(".toggle").forEach(b=>b.onclick=()=>{const det=b.nextElementSibling;det.hidden=!det.hidden;b.setAttribute("aria-expanded",!det.hidden);b.textContent=det.hidden?"Caption tonen":"Caption verbergen"});
@@ -316,7 +317,7 @@ function renderDay(){
     try{navigator.clipboard.writeText(txt).then(ok,fallback)}catch(e){fallback()}});
 }
 /* ===== Fotostudio ===== */
-const STUDIO={file:null,img:null,idx:0,blob:null};
+const STUDIO={file:null,img:null,idx:0,blob:null,kind:"image",vblob:null,raf:0,recording:false,audio:null};
 const PROTO={kicker:"MY PROTOCOL",title:"MOTS-c",pillTop:"MONDAY · THURSDAY",pillVal:"2 mg",phase:"CURRENTLY IN A FAT LOSS PHASE",
   boxTitle:"What is MOTS-c?",boxText:"A small peptide made by your mitochondria. Early research, mostly in animals, suggests it may support energy metabolism and insulin sensitivity. Human data is still limited.",
   fine:"Personal experience, not medical advice."};
@@ -341,18 +342,21 @@ const STOPS=[[0,[5,16,48]],[.45,[24,74,186]],[.75,[120,165,245]],[1,[244,247,255
 const LUT=(()=>{const l=new Uint8ClampedArray(256*3);for(let i=0;i<256;i++){let t=i/255;t=t<.5?2*t*t*.9+t*.1:1-Math.pow(-2*t+2,2)/2*.9-(1-t)*.1;t=Math.min(1,Math.max(0,t));
   let a=STOPS[0],b=STOPS[STOPS.length-1];for(let s=0;s<STOPS.length-1;s++)if(t>=STOPS[s][0]&&t<=STOPS[s+1][0]){a=STOPS[s];b=STOPS[s+1];break}
   const f=(t-a[0])/((b[0]-a[0])||1);for(let c=0;c<3;c++)l[i*3+c]=a[1][c]+(b[1][c]-a[1][c])*f}return l})();
-function drawPhoto(ctx,img,W,H,zoom,ox,oy){
-  const s=Math.max(W/img.naturalWidth,H/img.naturalHeight)*zoom;const w=img.naturalWidth*s,h=img.naturalHeight*s;
+function drawPhoto(ctx,img,W,H,zoom,ox,oy,fast){
+  const iw=img.videoWidth||img.naturalWidth,ih=img.videoHeight||img.naturalHeight;if(!iw||!ih)return;
+  const s=Math.max(W/iw,H/ih)*zoom;const w=iw*s,h=ih*s;
   const x=(W-w)/2+ox/100*(w-W)/2,y=(H-h)/2+oy/100*(h-H)/2;ctx.drawImage(img,x,y,w,h);
+  if(fast){ctx.save();ctx.globalCompositeOperation="color";ctx.fillStyle="#2f6fe6";ctx.fillRect(0,0,W,H);
+    ctx.globalCompositeOperation="screen";ctx.fillStyle="#08184a";ctx.fillRect(0,0,W,H);ctx.restore();return}
   const d=ctx.getImageData(0,0,W,H),p=d.data;for(let i=0;i<p.length;i+=4){const L=(p[i]*.299+p[i+1]*.587+p[i+2]*.114)|0;p[i]=LUT[L*3];p[i+1]=LUT[L*3+1];p[i+2]=LUT[L*3+2]}
   ctx.putImageData(d,0,0);
 }
 function wrap(ctx,text,maxW){const words=text.split(/\s+/);const lines=[];let line="";for(const w of words){const t=line?line+" "+w:w;if(ctx.measureText(t).width>maxW&&line){lines.push(line);line=w}else line=t}if(line)lines.push(line);return lines}
 function rrect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
 function F(w,s){return `${w} ${s}px Inter, "Helvetica Neue", Arial, sans-serif`}
-function render(canvas,img,o){
-  const W=1080,H=o.format==="feed"?1350:1920;canvas.width=W;canvas.height=H;const c=canvas.getContext("2d");
-  c.fillStyle="#08184a";c.fillRect(0,0,W,H);if(img)drawPhoto(c,img,W,H,o.zoom,o.ox,o.oy);
+function render(canvas,img,o,fast){
+  const W=1080,H=o.format==="feed"?1350:1920;if(canvas.width!==W)canvas.width=W;if(canvas.height!==H)canvas.height=H;const c=canvas.getContext("2d");
+  c.fillStyle="#08184a";c.fillRect(0,0,W,H);if(img)drawPhoto(c,img,W,H,o.zoom,o.ox,o.oy,fast);
   let g=c.createLinearGradient(0,0,0,H*.38);g.addColorStop(0,"#08184a");g.addColorStop(.55,"rgba(8,24,74,.75)");g.addColorStop(1,"rgba(8,24,74,0)");c.fillStyle=g;c.fillRect(0,0,W,H*.38);
   g=c.createLinearGradient(0,H*.52,0,H);g.addColorStop(0,"rgba(8,24,74,0)");g.addColorStop(.35,"rgba(8,24,74,.85)");g.addColorStop(1,"#08184a");c.fillStyle=g;c.fillRect(0,H*.52,W,H*.48);
   c.textAlign="center";c.textBaseline="alphabetic";const k=o.format==="feed"?.8:1;let y=(o.format==="feed"?90:150);
@@ -378,12 +382,35 @@ function fieldVals(){const v=id=>document.getElementById(id).value;return {forma
 function fillFields(o){const set=(id,x)=>document.getElementById(id).value=x??"";set("st-format",o.format);set("st-kicker",o.kicker);set("st-title",o.title);set("st-pilltop",o.pillTop);
   set("st-pillval",o.pillVal);set("st-phase",o.phase);set("st-boxtitle",o.boxTitle);set("st-boxtext",o.boxText);set("st-fine",o.fine);
   set("st-zoom",Math.round((o.zoom||1)*100));set("st-ox",o.ox||0);set("st-oy",o.oy||0)}
-let rT=null;function rerender(){clearTimeout(rT);rT=setTimeout(()=>{render(document.getElementById("st-canvas"),STUDIO.img,fieldVals());STUDIO.blob=null},60)}
+let rT=null;function rerender(){STUDIO.blob=null;STUDIO.vblob=null;if(STUDIO.kind==="video")return;clearTimeout(rT);rT=setTimeout(()=>{render(document.getElementById("st-canvas"),STUDIO.img,fieldVals())},60)}
+function stopVideo(){cancelAnimationFrame(STUDIO.raf);if(STUDIO.kind==="video"&&STUDIO.img){try{STUDIO.img.pause()}catch(e){}}}
+function loadVideo(blob){return new Promise((res,rej)=>{const v=document.createElement("video");v.muted=true;v.playsInline=true;v.setAttribute("playsinline","");v.loop=true;v.preload="auto";
+  v.onloadeddata=()=>res(v);v.onerror=()=>rej(v.error);v.src=URL.createObjectURL(blob);v.load()})}
+function previewLoop(){const cv=document.getElementById("st-canvas");const tick=()=>{if(STUDIO.kind!=="video"||!STUDIO.img)return;if(!STUDIO.recording)render(cv,STUDIO.img,fieldVals(),true);STUDIO.raf=requestAnimationFrame(tick)};cancelAnimationFrame(STUDIO.raf);STUDIO.raf=requestAnimationFrame(tick)}
+async function setMedia(blob,isVideo){stopVideo();STUDIO.file=blob;STUDIO.kind=isVideo?"video":"image";STUDIO.audio=null;
+  if(isVideo){STUDIO.img=await loadVideo(blob);try{await STUDIO.img.play()}catch(e){}previewLoop()}else{STUDIO.img=await loadImg(blob)}
+  document.getElementById("st-export").textContent=isVideo?"Video maken en opslaan":"Opslaan in Foto's";}
+function pickMime(){const c=["video/mp4;codecs=avc1","video/mp4","video/webm;codecs=vp9,opus","video/webm"];for(const m of c){try{if(MediaRecorder.isTypeSupported(m))return m}catch(e){}}return ""}
+async function recordVideo(){
+  const v=STUDIO.img,cv=document.getElementById("st-canvas"),btn=document.getElementById("st-export");
+  if(!window.MediaRecorder||!cv.captureStream){flash("Video's bewerken werkt niet in deze browser. Probeer Safari of Chrome.");return null}
+  const stream=cv.captureStream(30);
+  try{if(!STUDIO.audio){const AC=window.AudioContext||window.webkitAudioContext;const ac=new AC();const src=ac.createMediaElementSource(v);const dest=ac.createMediaStreamDestination();src.connect(dest);STUDIO.audio={ac,dest}}
+    await STUDIO.audio.ac.resume();STUDIO.audio.dest.stream.getAudioTracks().forEach(t=>stream.addTrack(t));v.muted=false}catch(e){}
+  const mime=pickMime();const rec=new MediaRecorder(stream,mime?{mimeType:mime,videoBitsPerSecond:8e6}:{videoBitsPerSecond:8e6});const chunks=[];
+  rec.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};
+  STUDIO.recording=true;cancelAnimationFrame(STUDIO.raf);v.loop=false;v.pause();v.currentTime=0;
+  await new Promise(r=>{v.onseeked=r;setTimeout(r,500)});
+  const o=fieldVals();let raf=0;const draw=()=>{render(cv,v,o,true);const pct=v.duration?Math.min(100,Math.round(v.currentTime/v.duration*100)):0;btn.textContent="Bezig… "+pct+"%";raf=requestAnimationFrame(draw)};
+  const done=new Promise(r=>{rec.onstop=r});rec.start(250);draw();await v.play();
+  await new Promise(r=>{v.onended=r});cancelAnimationFrame(raf);rec.stop();await done;
+  v.onended=null;v.loop=true;v.muted=true;STUDIO.recording=false;v.play().catch(()=>{});previewLoop();
+  const type=(rec.mimeType||mime||"video/webm").split(";")[0];return new Blob(chunks,{type})}
 function loadImg(blob){return new Promise((res,rej)=>{const u=URL.createObjectURL(blob);const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=u})}
 async function openStudio(idx,pick){
   STUDIO.idx=idx;const it=studioItems()[idx];document.getElementById("st-post").value=idx;
   const saved=await dbGet(photoKey(current,it));
-  if(saved){STUDIO.file=saved.original;STUDIO.img=await loadImg(saved.original);fillFields(saved.opts)}else{STUDIO.file=null;STUDIO.img=null;fillFields({...defaultsFor(it),zoom:1,ox:0,oy:0})}
+  if(saved){await setMedia(saved.original,saved.kind==="video");STUDIO.vblob=saved.editedVideo||null;fillFields(saved.opts)}else{stopVideo();STUDIO.file=null;STUDIO.img=null;STUDIO.kind="image";fillFields({...defaultsFor(it),zoom:1,ox:0,oy:0})}
   document.getElementById("st-empty").hidden=!!STUDIO.img;document.getElementById("st-edit").hidden=!STUDIO.img;
   if(STUDIO.img)rerender();
   document.getElementById("studio").scrollIntoView({behavior:"smooth",block:"start"});
@@ -393,24 +420,27 @@ function renderStudio(){
   const sel=document.getElementById("st-post");const items=studioItems();
   sel.innerHTML=items.map((it,i)=>`<option value="${i}">${it.time} · ${esc(it.title.replace(/^Optioneel: /,""))} (${it.type==="feed"?"feed":"story"})</option>`).join("");
   sel.value=Math.min(STUDIO.idx,items.length-1);if(STUDIO.day===current){decorateThumbs();return}STUDIO.day=current;STUDIO.idx=0;sel.value=0;document.getElementById("st-day").textContent=NAMES[current]+" "+dateFor(current).getDate()+" "+MONTHS[dateFor(current).getMonth()];
-  STUDIO.img=null;document.getElementById("st-empty").hidden=false;document.getElementById("st-edit").hidden=true;
+  stopVideo();STUDIO.img=null;STUDIO.kind="image";document.getElementById("st-empty").hidden=false;document.getElementById("st-edit").hidden=true;
   decorateThumbs();
 }
 async function decorateThumbs(){
   const items=itemsFor(current);
   for(let i=0;i<items.length;i++){const slot=document.getElementById("th-"+current+"-"+i);if(!slot)continue;const s=await dbGet(photoKey(current,items[i]));
     if(s&&s.edited){slot.innerHTML=`<img src="${URL.createObjectURL(s.edited)}" alt="Bewerkte foto voor ${esc(items[i].title)}">`;slot.hidden=false;
-      const b=document.getElementById("pb-"+current+"-"+i);if(b)b.textContent="Foto bekijken"}}
+      const b=document.getElementById("pb-"+current+"-"+i);if(b)b.textContent=s.kind==="video"?"Video bekijken":"Foto bekijken";if(s.kind==="video")slot.insertAdjacentHTML("beforeend",'<span class="vbadge">▶</span>')}}
 }
 function canvasBlob(cv){return new Promise(r=>cv.toBlob(r,"image/jpeg",.92))}
 async function saveStudio(){
-  const it=studioItems()[STUDIO.idx];const cv=document.getElementById("st-canvas");render(cv,STUDIO.img,fieldVals());const blob=await canvasBlob(cv);STUDIO.blob=blob;
-  await dbPut(photoKey(current,it),{original:STUDIO.file,opts:fieldVals(),edited:blob});flash("Bewaard bij "+it.time+" · "+it.title.replace(/^Optioneel: /,""));renderDay();
+  const it=studioItems()[STUDIO.idx];const cv=document.getElementById("st-canvas");render(cv,STUDIO.img,fieldVals(),STUDIO.kind==="video");const blob=await canvasBlob(cv);STUDIO.blob=blob;
+  await dbPut(photoKey(current,it),{original:STUDIO.file,kind:STUDIO.kind,opts:fieldVals(),edited:blob,editedVideo:STUDIO.vblob||null});flash("Bewaard bij "+it.time+" · "+it.title.replace(/^Optioneel: /,""));renderDay();
 }
-function fname(){const it=studioItems()[STUDIO.idx];return "PIT-"+isoDate(dateFor(current))+"-"+it.time.replace(":","")+"-"+it.title.replace(/^Optioneel: /,"").replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").toLowerCase()+".jpg"}
+function fname(){const it=studioItems()[STUDIO.idx];return "PIT-"+isoDate(dateFor(current))+"-"+it.time.replace(":","")+"-"+it.title.replace(/^Optioneel: /,"").replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").toLowerCase()}
 async function exportStudio(){
-  if(!STUDIO.blob)await saveStudio();const file=new File([STUDIO.blob],fname(),{type:"image/jpeg"});
-  if(window.claude&&window.claude.use){try{const dl=await window.claude.use("downloads");if(dl){await dl.save({filename:file.name,data:STUDIO.blob});flash("Opgeslagen: "+file.name);return}}catch(e){if(e&&e.code==="declined")return;flash("Opslaan lukt hier niet. Rechtsklik op het voorbeeld en kies Afbeelding opslaan.");return}}
+  let file;
+  if(STUDIO.kind==="video"){if(STUDIO.recording)return;if(!STUDIO.vblob){const vb=await recordVideo();if(!vb)return;STUDIO.vblob=vb;await saveStudio();document.getElementById("st-export").textContent="Video klaar · tik om op te slaan";flash("Video is klaar. Tik nog een keer om hem op te slaan.");return}
+    file=new File([STUDIO.vblob],fname()+(STUDIO.vblob.type.includes("mp4")?".mp4":".webm"),{type:STUDIO.vblob.type})}
+  else{if(!STUDIO.blob)await saveStudio();file=new File([STUDIO.blob],fname()+".jpg",{type:"image/jpeg"})}
+  if(window.claude&&window.claude.use){try{const dl=await window.claude.use("downloads");if(dl){await dl.save({filename:file.name,data:file});flash("Opgeslagen: "+file.name);return}}catch(e){if(e&&e.code==="declined")return;flash("Opslaan lukt hier niet. Rechtsklik op het voorbeeld en kies Afbeelding opslaan.");return}}
   if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file]});return}catch(e){if(e.name==="AbortError")return}}
   const a=document.createElement("a");a.href=URL.createObjectURL(file);a.download=file.name;document.body.appendChild(a);a.click();a.remove();flash("Gedownload: "+file.name);
 }
@@ -419,12 +449,13 @@ function initStudio(){
   document.getElementById("st-post").onchange=e=>openStudio(+e.target.value,false);
   document.getElementById("st-pick").onclick=()=>document.getElementById("st-file").click();
   document.getElementById("st-file").onchange=async e=>{const f=e.target.files[0];if(!f)return;e.target.value="";STUDIO.file=f;
-    try{STUDIO.img=await loadImg(f)}catch(err){flash("Deze foto kan niet worden geopend. Kies een JPG of PNG.");return}
+    const isV=(f.type||"").startsWith("video")||/\.(mov|mp4|m4v|webm)$/i.test(f.name||"");STUDIO.vblob=null;
+    try{await setMedia(f,isV)}catch(err){flash(isV?"Deze video kan niet worden geopend. Kies een MP4 of MOV.":"Deze foto kan niet worden geopend. Kies een JPG of PNG.");return}
     document.getElementById("st-empty").hidden=true;document.getElementById("st-edit").hidden=false;rerender();await saveStudio()};
   document.querySelectorAll("#st-edit input,#st-edit select,#st-edit textarea").forEach(x=>x.addEventListener("input",rerender));
   document.getElementById("st-reset").onclick=()=>{fillFields({...defaultsFor(studioItems()[STUDIO.idx]),zoom:1,ox:0,oy:0});rerender()};
   document.getElementById("st-save").onclick=saveStudio;document.getElementById("st-export").onclick=exportStudio;
-  document.getElementById("st-del").onclick=async()=>{const it=studioItems()[STUDIO.idx];await dbDel(photoKey(current,it));STUDIO.img=null;STUDIO.file=null;
+  document.getElementById("st-del").onclick=async()=>{const it=studioItems()[STUDIO.idx];await dbDel(photoKey(current,it));stopVideo();STUDIO.img=null;STUDIO.file=null;STUDIO.kind="image";
     document.getElementById("st-empty").hidden=false;document.getElementById("st-edit").hidden=true;flash("Foto verwijderd");renderDay()};
   if(document.fonts)document.fonts.load('800 40px Inter').then(()=>{if(STUDIO.img)rerender()});
 }
