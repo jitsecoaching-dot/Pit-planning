@@ -163,6 +163,7 @@ footer{text-align:center;font-family:var(--f-mono);font-size:10px;letter-spacing
             <label class="st-label" for="st-boxtitle">Kop onderaan<input type="text" id="st-boxtitle"></label>
             <label class="st-label" for="st-boxtext">Tekst onderaan<textarea id="st-boxtext"></textarea></label>
             <label class="st-label" for="st-fine">Kleine regel onderaan<input type="text" id="st-fine" placeholder="Personal experience, not medical advice."></label>
+            <label class="st-label" for="st-skin">Huid gladmaken<input type="range" id="st-skin" min="0" max="100" value="70"></label>
             <label class="st-label" for="st-zoom">Inzoomen<input type="range" id="st-zoom" min="100" max="250" value="100"></label>
             <div class="st-two">
               <label class="st-label" for="st-ox">Links / rechts<input type="range" id="st-ox" min="-100" max="100" value="0"></label>
@@ -323,12 +324,12 @@ const PROTO={kicker:"MY PROTOCOL",title:"MOTS-c",pillTop:"MONDAY · THURSDAY",pi
   fine:"Personal experience, not medical advice."};
 function shortTitle(t){if(t.length<=22)return t;const w=t.split(" ");let o="";for(const x of w){if((o+" "+x).trim().length>22)break;o=(o+" "+x).trim()}return o||t.slice(0,22)}
 function defaultsFor(it){
-  if(/MOTS-c protocol/i.test(it.title))return {...PROTO,format:"story"};
+  if(/MOTS-c protocol/i.test(it.title))return {...PROTO,format:"story",skin:20};
   const first=(it.caption||it.what).split("\n").filter(l=>l&&!l.startsWith("#"))[0]||"";
   const title=it.title.replace(/^Optioneel: /,"").replace(/^(Carrousel|Reel|Educatie-Reel)[: ]*/i,"").replace(/["“”]/g,"");
   const peptide=/peptide|MOTS-c/i.test(it.title+it.what);
   return {format:it.type==="feed"?"feed":"story",kicker:"PAIN IS TEMPORARY",title:shortTitle(title),pillTop:"",pillVal:"",
-    phase:"CURRENTLY IN A FAT LOSS PHASE",boxTitle:"",boxText:first,fine:peptide?"Personal experience, not medical advice.":""};
+    phase:"CURRENTLY IN A FAT LOSS PHASE",boxTitle:"",boxText:first,fine:peptide?"Personal experience, not medical advice.":"",skin:/check-in|voortgang|physique/i.test(it.title+it.what)?85:60};
 }
 /* IndexedDB */
 function idb(){return new Promise((res,rej)=>{const r=indexedDB.open("pit-studio",1);r.onupgradeneeded=()=>r.result.createObjectStore("photos");r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
@@ -342,13 +343,25 @@ const STOPS=[[0,[5,16,48]],[.45,[24,74,186]],[.75,[120,165,245]],[1,[244,247,255
 const LUT=(()=>{const l=new Uint8ClampedArray(256*3);for(let i=0;i<256;i++){let t=i/255;t=t<.5?2*t*t*.9+t*.1:1-Math.pow(-2*t+2,2)/2*.9-(1-t)*.1;t=Math.min(1,Math.max(0,t));
   let a=STOPS[0],b=STOPS[STOPS.length-1];for(let s=0;s<STOPS.length-1;s++)if(t>=STOPS[s][0]&&t<=STOPS[s+1][0]){a=STOPS[s];b=STOPS[s+1];break}
   const f=(t-a[0])/((b[0]-a[0])||1);for(let c=0;c<3;c++)l[i*3+c]=a[1][c]+(b[1][c]-a[1][c])*f}return l})();
-function drawPhoto(ctx,img,W,H,zoom,ox,oy,fast){
+function boxBlur(src,W,H,r){const tmp=new Float32Array(W*H),out=new Float32Array(W*H),d=2*r+1;
+  for(let y=0;y<H;y++){const o=y*W;let acc=0;for(let x=-r;x<=r;x++)acc+=src[o+Math.min(W-1,Math.max(0,x))];
+    for(let x=0;x<W;x++){tmp[o+x]=acc/d;acc+=src[o+Math.min(W-1,x+r+1)]-src[o+Math.max(0,x-r)]}}
+  for(let x=0;x<W;x++){let acc=0;for(let y=-r;y<=r;y++)acc+=tmp[Math.min(H-1,Math.max(0,y))*W+x];
+    for(let y=0;y<H;y++){out[y*W+x]=acc/d;acc+=tmp[Math.min(H-1,y+r+1)*W+x]-tmp[Math.max(0,y-r)*W+x]}}return out}
+/* Huid gladmaken: rood-filter luminantie (rode plekjes worden even licht als de huid) + randbewarende verzachting */
+function toneMap(p,W,H,skin){const N=W*H,L=new Float32Array(N);
+  const wr=.299+(.70-.299)*skin,wg=.587+(.25-.587)*skin,wb=.114+(.05-.114)*skin;
+  for(let i=0,j=0;j<N;i+=4,j++)L[j]=p[i]*wr+p[i+1]*wg+p[i+2]*wb;
+  let out=L;if(skin>0){const r=Math.max(2,Math.round(W/150));const B=boxBlur(boxBlur(L,W,H,r),W,H,r);const sig=14+22*skin,amt=Math.min(1,skin*1.1);out=new Float32Array(N);
+    for(let j=0;j<N;j++){const dd=(B[j]-L[j])/sig;out[j]=L[j]+(B[j]-L[j])*amt*Math.exp(-dd*dd)}}
+  for(let i=0,j=0;j<N;i+=4,j++){const v=Math.max(0,Math.min(255,out[j]))|0;p[i]=LUT[v*3];p[i+1]=LUT[v*3+1];p[i+2]=LUT[v*3+2]}}
+function drawPhoto(ctx,img,W,H,zoom,ox,oy,fast,skin){
   const iw=img.videoWidth||img.naturalWidth,ih=img.videoHeight||img.naturalHeight;if(!iw||!ih)return;
   const s=Math.max(W/iw,H/ih)*zoom;const w=iw*s,h=ih*s;
   const x=(W-w)/2+ox/100*(w-W)/2,y=(H-h)/2+oy/100*(h-H)/2;ctx.drawImage(img,x,y,w,h);
   if(fast){ctx.save();ctx.globalCompositeOperation="color";ctx.fillStyle="#2f6fe6";ctx.fillRect(0,0,W,H);
     ctx.globalCompositeOperation="screen";ctx.fillStyle="#08184a";ctx.fillRect(0,0,W,H);ctx.restore();return}
-  const d=ctx.getImageData(0,0,W,H),p=d.data;for(let i=0;i<p.length;i+=4){const L=(p[i]*.299+p[i+1]*.587+p[i+2]*.114)|0;p[i]=LUT[L*3];p[i+1]=LUT[L*3+1];p[i+2]=LUT[L*3+2]}
+  const d=ctx.getImageData(0,0,W,H),p=d.data;toneMap(p,W,H,skin||0);
   ctx.putImageData(d,0,0);
 }
 function wrap(ctx,text,maxW){const words=text.split(/\s+/);const lines=[];let line="";for(const w of words){const t=line?line+" "+w:w;if(ctx.measureText(t).width>maxW&&line){lines.push(line);line=w}else line=t}if(line)lines.push(line);return lines}
@@ -356,7 +369,7 @@ function rrect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,
 function F(w,s){return `${w} ${s}px Inter, "Helvetica Neue", Arial, sans-serif`}
 function render(canvas,img,o,fast){
   const W=1080,H=o.format==="feed"?1350:1920;if(canvas.width!==W)canvas.width=W;if(canvas.height!==H)canvas.height=H;const c=canvas.getContext("2d");
-  c.fillStyle="#08184a";c.fillRect(0,0,W,H);if(img)drawPhoto(c,img,W,H,o.zoom,o.ox,o.oy,fast);
+  c.fillStyle="#08184a";c.fillRect(0,0,W,H);if(img)drawPhoto(c,img,W,H,o.zoom,o.ox,o.oy,fast,(o.skin??0)/100);
   let g=c.createLinearGradient(0,0,0,H*.38);g.addColorStop(0,"#08184a");g.addColorStop(.55,"rgba(8,24,74,.75)");g.addColorStop(1,"rgba(8,24,74,0)");c.fillStyle=g;c.fillRect(0,0,W,H*.38);
   g=c.createLinearGradient(0,H*.52,0,H);g.addColorStop(0,"rgba(8,24,74,0)");g.addColorStop(.35,"rgba(8,24,74,.85)");g.addColorStop(1,"#08184a");c.fillStyle=g;c.fillRect(0,H*.52,W,H*.48);
   c.textAlign="center";c.textBaseline="alphabetic";const k=o.format==="feed"?.8:1;let y=(o.format==="feed"?90:150);
@@ -378,10 +391,10 @@ function render(canvas,img,o,fast){
 }
 function studioItems(){return itemsFor(current)}
 function fieldVals(){const v=id=>document.getElementById(id).value;return {format:v("st-format"),kicker:v("st-kicker"),title:v("st-title"),pillTop:v("st-pilltop"),pillVal:v("st-pillval"),
-  phase:v("st-phase"),boxTitle:v("st-boxtitle"),boxText:v("st-boxtext"),fine:v("st-fine"),zoom:+v("st-zoom")/100,ox:+v("st-ox"),oy:+v("st-oy")}}
+  phase:v("st-phase"),boxTitle:v("st-boxtitle"),boxText:v("st-boxtext"),fine:v("st-fine"),zoom:+v("st-zoom")/100,skin:+v("st-skin"),ox:+v("st-ox"),oy:+v("st-oy")}}
 function fillFields(o){const set=(id,x)=>document.getElementById(id).value=x??"";set("st-format",o.format);set("st-kicker",o.kicker);set("st-title",o.title);set("st-pilltop",o.pillTop);
   set("st-pillval",o.pillVal);set("st-phase",o.phase);set("st-boxtitle",o.boxTitle);set("st-boxtext",o.boxText);set("st-fine",o.fine);
-  set("st-zoom",Math.round((o.zoom||1)*100));set("st-ox",o.ox||0);set("st-oy",o.oy||0)}
+  set("st-zoom",Math.round((o.zoom||1)*100));set("st-skin",o.skin??70);set("st-ox",o.ox||0);set("st-oy",o.oy||0)}
 let rT=null;function rerender(){STUDIO.blob=null;STUDIO.vblob=null;if(STUDIO.kind==="video")return;clearTimeout(rT);rT=setTimeout(()=>{render(document.getElementById("st-canvas"),STUDIO.img,fieldVals())},60)}
 function stopVideo(){cancelAnimationFrame(STUDIO.raf);if(STUDIO.kind==="video"&&STUDIO.img){try{STUDIO.img.pause()}catch(e){}}}
 function loadVideo(blob){return new Promise((res,rej)=>{const v=document.createElement("video");v.muted=true;v.playsInline=true;v.setAttribute("playsinline","");v.loop=true;v.preload="auto";
