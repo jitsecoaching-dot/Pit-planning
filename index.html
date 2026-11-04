@@ -16,7 +16,7 @@
 
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&family=Inter:wght@400;500;600;700;800&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
 /* Layout: kapel-poort. Logo als altaar bovenaan, daaronder de dag als liturgische orde van uren: grote tijd links, opdracht rechts. Bewust één donker thema. */
 :root{
@@ -94,6 +94,32 @@ details.rules li::before{content:counter(r,upper-roman);font-family:var(--f-mono
 footer{text-align:center;font-family:var(--f-mono);font-size:10px;letter-spacing:.3em;color:var(--ash);text-transform:uppercase}
 @media (max-width:420px){.item{grid-template-columns:64px 1fr;gap:12px}.time{font-size:28px}.days button .n{display:none}.days button .d{font-size:13px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+.photo-btn{align-self:flex-start;font-family:var(--f-mono);font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--ash);background:none;border:1.5px dashed var(--ash);padding:6px 10px;cursor:pointer}
+.photo-btn:focus-visible,.st-btn:focus-visible{outline:2px solid var(--ember);outline-offset:3px}
+.thumb{width:84px;border:1.5px solid var(--bone);line-height:0}
+.thumb img{width:100%;display:block}
+.actions{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+#studio{border:2px solid var(--bone);display:flex;flex-direction:column}
+.st-head{background:var(--bone);color:var(--ink);padding:14px 18px;display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap}
+.st-head h2{font-family:var(--f-display);font-weight:900;font-stretch:125%;font-size:22px;margin:0;text-transform:uppercase}
+.st-head span{font-family:var(--f-mono);font-size:11px;letter-spacing:.2em;text-transform:uppercase}
+.st-body{padding:18px;display:flex;flex-direction:column;gap:16px}
+.st-label{font-family:var(--f-mono);font-size:10px;letter-spacing:.25em;text-transform:uppercase;color:var(--ash);display:flex;flex-direction:column;gap:6px}
+.st-body select,.st-body input[type=text],.st-body textarea{font:inherit;font-family:var(--f-body);font-size:15px;letter-spacing:0;text-transform:none;color:var(--bone);background:var(--stone);border:1px solid var(--soot);border-radius:0;padding:10px 12px;width:100%}
+.st-body textarea{min-height:84px;resize:vertical}
+.st-body input[type=range]{width:100%;accent-color:var(--bone)}
+.st-empty{border:1.5px dashed var(--ash);padding:28px 16px;text-align:center;display:flex;flex-direction:column;gap:12px;align-items:center;color:var(--ash);font-size:14px}
+.st-btn{font-family:var(--f-mono);font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;border:2px solid var(--bone);background:transparent;color:var(--bone);padding:11px 14px;cursor:pointer}
+.st-btn.primary{background:var(--bone);color:var(--ink)}
+.st-btn.quiet{border-color:var(--soot);color:var(--ash)}
+.st-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start}
+.st-preview{background:#000;border:1px solid var(--soot);line-height:0}
+.st-preview canvas{width:100%;height:auto;display:block}
+.st-fields{display:flex;flex-direction:column;gap:12px;min-width:0}
+.st-two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.st-msg{font-size:13px;color:var(--bone);border-left:4px solid var(--ember);padding-left:10px}
+@media (max-width:620px){.st-grid{grid-template-columns:1fr}.st-preview{max-width:300px;margin:0 auto;width:100%}}
 </style>
 </head>
 <body>
@@ -109,6 +135,51 @@ footer{text-align:center;font-family:var(--f-mono);font-size:10px;letter-spacing
   <nav class="days" id="days" aria-label="Kies een dag"></nav>
 
   <section id="day" aria-live="polite"></section>
+
+  <section id="studio" aria-label="Fotostudio">
+    <div class="st-head"><h2>Fotostudio</h2><span id="st-day"></span></div>
+    <div class="st-body">
+      <label class="st-label" for="st-post">Voor welke post
+        <select id="st-post"></select></label>
+      <input type="file" id="st-file" accept="image/*" hidden>
+      <div class="st-empty" id="st-empty">
+        <p style="margin:0">Kies een foto. Hij wordt bijgesneden en in blauw/wit bewerkt, met de tekst van deze post erop.</p>
+        <button type="button" class="st-btn primary" id="st-pick">Foto kiezen</button>
+      </div>
+      <div id="st-edit" hidden>
+        <div class="st-grid">
+          <div class="st-preview"><canvas id="st-canvas" width="1080" height="1920" aria-label="Voorbeeld van de bewerkte foto"></canvas></div>
+          <div class="st-fields">
+            <label class="st-label" for="st-format">Formaat
+              <select id="st-format"><option value="story">Story · 1080 × 1920</option><option value="feed">Feed · 1080 × 1350</option></select></label>
+            <label class="st-label" for="st-kicker">Kleine kop<input type="text" id="st-kicker"></label>
+            <label class="st-label" for="st-title">Titel<input type="text" id="st-title"></label>
+            <div class="st-two">
+              <label class="st-label" for="st-pilltop">Schema<input type="text" id="st-pilltop" placeholder="MONDAY · THURSDAY"></label>
+              <label class="st-label" for="st-pillval">Dosis<input type="text" id="st-pillval" placeholder="2 mg"></label>
+            </div>
+            <label class="st-label" for="st-phase">Fase-label<input type="text" id="st-phase"></label>
+            <label class="st-label" for="st-boxtitle">Kop onderaan<input type="text" id="st-boxtitle"></label>
+            <label class="st-label" for="st-boxtext">Tekst onderaan<textarea id="st-boxtext"></textarea></label>
+            <label class="st-label" for="st-fine">Kleine regel onderaan<input type="text" id="st-fine" placeholder="Personal experience, not medical advice."></label>
+            <label class="st-label" for="st-zoom">Inzoomen<input type="range" id="st-zoom" min="100" max="250" value="100"></label>
+            <div class="st-two">
+              <label class="st-label" for="st-ox">Links / rechts<input type="range" id="st-ox" min="-100" max="100" value="0"></label>
+              <label class="st-label" for="st-oy">Omhoog / omlaag<input type="range" id="st-oy" min="-100" max="100" value="0"></label>
+            </div>
+          </div>
+        </div>
+        <div class="actions" style="margin-top:16px">
+          <button type="button" class="st-btn primary" id="st-export">Opslaan in Foto's</button>
+          <button type="button" class="st-btn" id="st-save">Bewaar bij post</button>
+          <button type="button" class="st-btn quiet" id="st-reset">Tekst herstellen</button>
+          <button type="button" class="st-btn quiet" id="st-del">Verwijderen</button>
+          <button type="button" class="st-btn quiet" id="st-pick2" onclick="document.getElementById('st-file').click()">Andere foto</button>
+        </div>
+      </div>
+      <p class="st-msg" id="st-msg" hidden></p>
+    </div>
+  </section>
 
   <div class="legend"><span class="tag story">Story</span><span class="tag feed">Feed</span><span class="tag opt">Optioneel</span><span class="tag risk">Let op</span></div>
 
@@ -230,9 +301,13 @@ function renderDay(){
             <button type="button" class="check" id="chk-${current}-${i}" role="checkbox" aria-checked="${isDone}" aria-label="Gepost: ${esc(it.title)}" data-id="${esc(id)}"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="square"><path d="M2.5 8.5l3.5 3.5 7.5-8"/></svg></button>
           </div>
           ${it.note?`<div class="note">${esc(it.note)}</div>`:""}
+          <div class="thumb" id="th-${current}-${i}" hidden></div>
+          <button type="button" class="photo-btn" id="pb-${current}-${i}" data-i="${i}">+ Foto</button>
           ${it.caption?`<button type="button" class="toggle" id="tg-${current}-${i}" aria-expanded="false">Caption tonen</button>
           <div class="detail" hidden><div class="caption">${fmtCaption(it.caption)}</div><button type="button" class="copy" id="cp-${current}-${i}">Kopieer caption</button></div>`:""}
         </div></div>`}).join("")}</div></div>`;
+  el.querySelectorAll(".photo-btn").forEach(b=>b.onclick=async()=>{const has=b.textContent!=="+ Foto";await openStudio(+b.dataset.i,!has)});
+  renderStudio();
   el.querySelectorAll(".check").forEach(b=>b.onclick=()=>{const d=load(key);const id=b.dataset.id;if(d[id])delete d[id];else d[id]=1;save(key,d);renderDay()});
   el.querySelectorAll(".toggle").forEach(b=>b.onclick=()=>{const det=b.nextElementSibling;det.hidden=!det.hidden;b.setAttribute("aria-expanded",!det.hidden);b.textContent=det.hidden?"Caption tonen":"Caption verbergen"});
   el.querySelectorAll(".copy").forEach(b=>b.onclick=()=>{const txt=b.previousElementSibling.textContent;
@@ -240,9 +315,122 @@ function renderDay(){
     const fallback=()=>{const r=document.createRange();r.selectNodeContents(b.previousElementSibling);const s=getSelection();s.removeAllRanges();s.addRange(r);b.textContent="Geselecteerd, kopieer handmatig"};
     try{navigator.clipboard.writeText(txt).then(ok,fallback)}catch(e){fallback()}});
 }
+/* ===== Fotostudio ===== */
+const STUDIO={file:null,img:null,idx:0,blob:null};
+const PROTO={kicker:"MY PROTOCOL",title:"MOTS-c",pillTop:"MONDAY · THURSDAY",pillVal:"2 mg",phase:"CURRENTLY IN A FAT LOSS PHASE",
+  boxTitle:"What is MOTS-c?",boxText:"A small peptide made by your mitochondria. Early research, mostly in animals, suggests it may support energy metabolism and insulin sensitivity. Human data is still limited.",
+  fine:"Personal experience, not medical advice."};
+function shortTitle(t){if(t.length<=22)return t;const w=t.split(" ");let o="";for(const x of w){if((o+" "+x).trim().length>22)break;o=(o+" "+x).trim()}return o||t.slice(0,22)}
+function defaultsFor(it){
+  if(/MOTS-c protocol/i.test(it.title))return {...PROTO,format:"story"};
+  const first=(it.caption||it.what).split("\n").filter(l=>l&&!l.startsWith("#"))[0]||"";
+  const title=it.title.replace(/^Optioneel: /,"").replace(/^(Carrousel|Reel|Educatie-Reel)[: ]*/i,"").replace(/["“”]/g,"");
+  const peptide=/peptide|MOTS-c/i.test(it.title+it.what);
+  return {format:it.type==="feed"?"feed":"story",kicker:"PAIN IS TEMPORARY",title:shortTitle(title),pillTop:"",pillVal:"",
+    phase:"CURRENTLY IN A FAT LOSS PHASE",boxTitle:"",boxText:first,fine:peptide?"Personal experience, not medical advice.":""};
+}
+/* IndexedDB */
+function idb(){return new Promise((res,rej)=>{const r=indexedDB.open("pit-studio",1);r.onupgradeneeded=()=>r.result.createObjectStore("photos");r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+async function dbGet(k){try{const d=await idb();return await new Promise(r=>{const q=d.transaction("photos").objectStore("photos").get(k);q.onsuccess=()=>r(q.result);q.onerror=()=>r(null)})}catch(e){return null}}
+async function dbPut(k,v){try{const d=await idb();await new Promise((r,j)=>{const t=d.transaction("photos","readwrite");t.objectStore("photos").put(v,k);t.oncomplete=r;t.onerror=()=>j(t.error)})}catch(e){}}
+async function dbDel(k){try{const d=await idb();await new Promise(r=>{const t=d.transaction("photos","readwrite");t.objectStore("photos").delete(k);t.oncomplete=r;t.onerror=r})}catch(e){}}
+function photoKey(dow,it){return isoDate(dateFor(dow))+"|"+it.time+it.title}
+
+/* Duotone in blauw/wit */
+const STOPS=[[0,[5,16,48]],[.45,[24,74,186]],[.75,[120,165,245]],[1,[244,247,255]]];
+const LUT=(()=>{const l=new Uint8ClampedArray(256*3);for(let i=0;i<256;i++){let t=i/255;t=t<.5?2*t*t*.9+t*.1:1-Math.pow(-2*t+2,2)/2*.9-(1-t)*.1;t=Math.min(1,Math.max(0,t));
+  let a=STOPS[0],b=STOPS[STOPS.length-1];for(let s=0;s<STOPS.length-1;s++)if(t>=STOPS[s][0]&&t<=STOPS[s+1][0]){a=STOPS[s];b=STOPS[s+1];break}
+  const f=(t-a[0])/((b[0]-a[0])||1);for(let c=0;c<3;c++)l[i*3+c]=a[1][c]+(b[1][c]-a[1][c])*f}return l})();
+function drawPhoto(ctx,img,W,H,zoom,ox,oy){
+  const s=Math.max(W/img.naturalWidth,H/img.naturalHeight)*zoom;const w=img.naturalWidth*s,h=img.naturalHeight*s;
+  const x=(W-w)/2+ox/100*(w-W)/2,y=(H-h)/2+oy/100*(h-H)/2;ctx.drawImage(img,x,y,w,h);
+  const d=ctx.getImageData(0,0,W,H),p=d.data;for(let i=0;i<p.length;i+=4){const L=(p[i]*.299+p[i+1]*.587+p[i+2]*.114)|0;p[i]=LUT[L*3];p[i+1]=LUT[L*3+1];p[i+2]=LUT[L*3+2]}
+  ctx.putImageData(d,0,0);
+}
+function wrap(ctx,text,maxW){const words=text.split(/\s+/);const lines=[];let line="";for(const w of words){const t=line?line+" "+w:w;if(ctx.measureText(t).width>maxW&&line){lines.push(line);line=w}else line=t}if(line)lines.push(line);return lines}
+function rrect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath()}
+function F(w,s){return `${w} ${s}px Inter, "Helvetica Neue", Arial, sans-serif`}
+function render(canvas,img,o){
+  const W=1080,H=o.format==="feed"?1350:1920;canvas.width=W;canvas.height=H;const c=canvas.getContext("2d");
+  c.fillStyle="#08184a";c.fillRect(0,0,W,H);if(img)drawPhoto(c,img,W,H,o.zoom,o.ox,o.oy);
+  let g=c.createLinearGradient(0,0,0,H*.38);g.addColorStop(0,"#08184a");g.addColorStop(.55,"rgba(8,24,74,.75)");g.addColorStop(1,"rgba(8,24,74,0)");c.fillStyle=g;c.fillRect(0,0,W,H*.38);
+  g=c.createLinearGradient(0,H*.52,0,H);g.addColorStop(0,"rgba(8,24,74,0)");g.addColorStop(.35,"rgba(8,24,74,.85)");g.addColorStop(1,"#08184a");c.fillStyle=g;c.fillRect(0,H*.52,W,H*.48);
+  c.textAlign="center";c.textBaseline="alphabetic";const k=o.format==="feed"?.8:1;let y=(o.format==="feed"?90:150);
+  if(o.kicker){c.fillStyle="#9cc0ff";c.font=F(600,34*k);c.fillText(o.kicker.toUpperCase().split("").join(String.fromCharCode(8202)),W/2,y);y+=30*k}
+  if(o.title){let fs=150*k;c.font=F(800,fs);while(c.measureText(o.title).width>W-120&&fs>60){fs-=6;c.font=F(800,fs)}c.fillStyle="#fff";y+=fs*.92;c.fillText(o.title,W/2,y);y+=40*k}
+  if(o.pillTop||o.pillVal){c.font=F(700,48*k);const w=Math.max(c.measureText(o.pillVal).width,(c.font=F(500,32*k),c.measureText(o.pillTop).width))+140*k;const h=(o.pillTop&&o.pillVal?118:80)*k;
+    c.fillStyle="#fff";rrect(c,(W-w)/2,y,w,h,h/2);c.fill();c.fillStyle="#14306e";
+    if(o.pillTop){c.font=F(500,32*k);c.fillText(o.pillTop,W/2,y+(o.pillVal?46:52)*k)}if(o.pillVal){c.font=F(700,48*k);c.fillText(o.pillVal,W/2,y+(o.pillTop?98:58)*k)}y+=h+34*k}
+  if(o.phase){c.font=F(700,31*k);const t=o.phase.toUpperCase();const w=c.measureText(t).width+110*k,h=64*k;c.fillStyle="#1f6be8";rrect(c,(W-w)/2,y,w,h,h/2);c.fill();
+    c.fillStyle="#fff";c.beginPath();c.arc((W-w)/2+40*k,y+h/2,9*k,0,7);c.fill();c.fillText(t,W/2+18*k,y+h/2+11*k)}
+  const pad=70,innerW=W-pad*2-100;c.textAlign="left";const lines=[];
+  if(o.boxText){c.font=F(400,31*k);lines.push(...wrap(c,o.boxText,innerW))}
+  const lh=44*k,titleH=o.boxTitle?70*k:0,boxH=(o.boxText||o.boxTitle)?(44*k+titleH+lines.length*lh+30*k):0;
+  const bottomY=H-(o.fine?110:70)*k;
+  if(boxH){const by=bottomY-boxH;c.fillStyle="rgba(10,30,90,.55)";rrect(c,pad,by,W-pad*2,boxH,40);c.fill();c.strokeStyle="rgba(160,190,255,.45)";c.lineWidth=2;c.stroke();
+    let ty=by+44*k;if(o.boxTitle){c.fillStyle="#fff";c.font=F(800,56*k);c.fillText(o.boxTitle,pad+50,ty+48*k);ty+=titleH}
+    c.fillStyle="#dbe6ff";c.font=F(400,31*k);lines.forEach((l,i)=>c.fillText(l,pad+50,ty+30*k+i*lh))}
+  if(o.fine){c.textAlign="center";c.fillStyle="#9fb6e8";c.font=F(400,24*k);c.fillText(o.fine,W/2,H-60*k)}
+}
+function studioItems(){return itemsFor(current)}
+function fieldVals(){const v=id=>document.getElementById(id).value;return {format:v("st-format"),kicker:v("st-kicker"),title:v("st-title"),pillTop:v("st-pilltop"),pillVal:v("st-pillval"),
+  phase:v("st-phase"),boxTitle:v("st-boxtitle"),boxText:v("st-boxtext"),fine:v("st-fine"),zoom:+v("st-zoom")/100,ox:+v("st-ox"),oy:+v("st-oy")}}
+function fillFields(o){const set=(id,x)=>document.getElementById(id).value=x??"";set("st-format",o.format);set("st-kicker",o.kicker);set("st-title",o.title);set("st-pilltop",o.pillTop);
+  set("st-pillval",o.pillVal);set("st-phase",o.phase);set("st-boxtitle",o.boxTitle);set("st-boxtext",o.boxText);set("st-fine",o.fine);
+  set("st-zoom",Math.round((o.zoom||1)*100));set("st-ox",o.ox||0);set("st-oy",o.oy||0)}
+let rT=null;function rerender(){clearTimeout(rT);rT=setTimeout(()=>{render(document.getElementById("st-canvas"),STUDIO.img,fieldVals());STUDIO.blob=null},60)}
+function loadImg(blob){return new Promise((res,rej)=>{const u=URL.createObjectURL(blob);const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=u})}
+async function openStudio(idx,pick){
+  STUDIO.idx=idx;const it=studioItems()[idx];document.getElementById("st-post").value=idx;
+  const saved=await dbGet(photoKey(current,it));
+  if(saved){STUDIO.file=saved.original;STUDIO.img=await loadImg(saved.original);fillFields(saved.opts)}else{STUDIO.file=null;STUDIO.img=null;fillFields({...defaultsFor(it),zoom:1,ox:0,oy:0})}
+  document.getElementById("st-empty").hidden=!!STUDIO.img;document.getElementById("st-edit").hidden=!STUDIO.img;
+  if(STUDIO.img)rerender();
+  document.getElementById("studio").scrollIntoView({behavior:"smooth",block:"start"});
+  if(pick)document.getElementById("st-file").click();
+}
+function renderStudio(){
+  const sel=document.getElementById("st-post");const items=studioItems();
+  sel.innerHTML=items.map((it,i)=>`<option value="${i}">${it.time} · ${esc(it.title.replace(/^Optioneel: /,""))} (${it.type==="feed"?"feed":"story"})</option>`).join("");
+  sel.value=Math.min(STUDIO.idx,items.length-1);if(STUDIO.day===current){decorateThumbs();return}STUDIO.day=current;STUDIO.idx=0;sel.value=0;document.getElementById("st-day").textContent=NAMES[current]+" "+dateFor(current).getDate()+" "+MONTHS[dateFor(current).getMonth()];
+  STUDIO.img=null;document.getElementById("st-empty").hidden=false;document.getElementById("st-edit").hidden=true;
+  decorateThumbs();
+}
+async function decorateThumbs(){
+  const items=itemsFor(current);
+  for(let i=0;i<items.length;i++){const slot=document.getElementById("th-"+current+"-"+i);if(!slot)continue;const s=await dbGet(photoKey(current,items[i]));
+    if(s&&s.edited){slot.innerHTML=`<img src="${URL.createObjectURL(s.edited)}" alt="Bewerkte foto voor ${esc(items[i].title)}">`;slot.hidden=false;
+      const b=document.getElementById("pb-"+current+"-"+i);if(b)b.textContent="Foto bekijken"}}
+}
+function canvasBlob(cv){return new Promise(r=>cv.toBlob(r,"image/jpeg",.92))}
+async function saveStudio(){
+  const it=studioItems()[STUDIO.idx];const cv=document.getElementById("st-canvas");render(cv,STUDIO.img,fieldVals());const blob=await canvasBlob(cv);STUDIO.blob=blob;
+  await dbPut(photoKey(current,it),{original:STUDIO.file,opts:fieldVals(),edited:blob});flash("Bewaard bij "+it.time+" · "+it.title.replace(/^Optioneel: /,""));renderDay();
+}
+function fname(){const it=studioItems()[STUDIO.idx];return "PIT-"+isoDate(dateFor(current))+"-"+it.time.replace(":","")+"-"+it.title.replace(/^Optioneel: /,"").replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"").toLowerCase()+".jpg"}
+async function exportStudio(){
+  if(!STUDIO.blob)await saveStudio();const file=new File([STUDIO.blob],fname(),{type:"image/jpeg"});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){try{await navigator.share({files:[file]});return}catch(e){if(e.name==="AbortError")return}}
+  const a=document.createElement("a");a.href=URL.createObjectURL(file);a.download=file.name;document.body.appendChild(a);a.click();a.remove();flash("Gedownload: "+file.name);
+}
+function flash(t){const m=document.getElementById("st-msg");m.textContent=t;m.hidden=false;clearTimeout(flash.t);flash.t=setTimeout(()=>m.hidden=true,3500)}
+function initStudio(){
+  document.getElementById("st-post").onchange=e=>openStudio(+e.target.value,false);
+  document.getElementById("st-pick").onclick=()=>document.getElementById("st-file").click();
+  document.getElementById("st-file").onchange=async e=>{const f=e.target.files[0];if(!f)return;e.target.value="";STUDIO.file=f;
+    try{STUDIO.img=await loadImg(f)}catch(err){flash("Deze foto kan niet worden geopend. Kies een JPG of PNG.");return}
+    document.getElementById("st-empty").hidden=true;document.getElementById("st-edit").hidden=false;rerender();await saveStudio()};
+  document.querySelectorAll("#st-edit input,#st-edit select,#st-edit textarea").forEach(x=>x.addEventListener("input",rerender));
+  document.getElementById("st-reset").onclick=()=>{fillFields({...defaultsFor(studioItems()[STUDIO.idx]),zoom:1,ox:0,oy:0});rerender()};
+  document.getElementById("st-save").onclick=saveStudio;document.getElementById("st-export").onclick=exportStudio;
+  document.getElementById("st-del").onclick=async()=>{const it=studioItems()[STUDIO.idx];await dbDel(photoKey(current,it));STUDIO.img=null;STUDIO.file=null;
+    document.getElementById("st-empty").hidden=false;document.getElementById("st-edit").hidden=true;flash("Foto verwijderd");renderDay()};
+  if(document.fonts)document.fonts.load('800 40px Inter').then(()=>{if(STUDIO.img)rerender()});
+}
+
 function isoWeek(d){const t=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const n=t.getUTCDay()||7;t.setUTCDate(t.getUTCDate()+4-n);const y=new Date(Date.UTC(t.getUTCFullYear(),0,1));return Math.ceil(((t-y)/864e5+1)/7)}
 document.getElementById("week").textContent="Week "+String(isoWeek(now)).padStart(2,"0");
-renderDays();renderDay();
+initStudio();renderDays();renderDay();
 </script>
 <script>if("serviceWorker" in navigator){addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}))}</script>
 </body>
